@@ -1,0 +1,97 @@
+---
+title: "DallasOpenData_Vehicle"
+author: "Greg Heartsfield"
+date: "December 13, 2014"
+output: html_document
+---
+
+Import libraries for graphing.
+
+```{r}
+require(lattice)
+require(ggplot2)
+```
+
+
+Read vehicle data from the Dallas Open Data website, if it doesn't already exist in the current directory.
+
+```{r}
+vehicle.file <- "rms_vehicle.csv"
+if(!file.exists(vehicle.file)) {
+  download.file("http://www.dallasopendata.com/api/views/imkj-2sfb/rows.csv?accessType=DOWNLOAD",vehicle.file);
+}
+
+```
+
+Read in as CSV.
+
+```{r}
+vehicle <- read.csv(vehicle.file,stringsAsFactors=FALSE)
+```
+
+Some of the vehicle year data has incorrect years with transposed digits, so we only look at years that make sense for vehicle (1975 to 2015).
+
+```{r}
+vehicle.correct.years <- vehicle[which((vehicle$VehYr > 1975) &(vehicle$VehYr < 2015)),]
+```
+
+Look at just stolen vehicles
+
+
+```{r}
+vehicles.stolen <- vehicle.correct.years[which(vehicle$VehType=="Stolen"),]
+```
+
+Dotchart showing number of vehicles stolen by vehicle year.
+
+```{r fig.height=8}
+yrs.table <- table(vehicles.stolen$VehYr)
+dotchart(as.numeric(yrs.table), labels=row.names(yrs.table))
+```
+
+Average age of vehicles on road is 11.4 years (http://www.latimes.com/business/autos/la-fi-hy-ihs-automotive-average-age-car-20140609-story.html).  So, based on that, we can determine a very rough estimate of what we would expect the underlying distribution of car ages to be.
+ 
+ * Assumptions: number of cars sold each year is constant.
+ * Car lifespan is 11.4 years on average.
+ * Distribution of car lifespan is exponential
+ 
+Determine the total number of stolen cars:
+
+```{r}
+car.stolen.count <- dim(vehicles.stolen)[1]
+```
+
+Find a parameter for the exponential function that comes close to 11.4 years (looking at 50 years of vehicles)
+```{r}
+sum(dexp(seq(1,50), rate=0.08) * seq(1,50))
+```
+
+Look at the expected number of stolen vehicles based on an exponential distribution.
+
+```{r fig.height=8}
+exp.stolen.count <- dexp(seq(40,1), rate=0.08) * car.stolen.count
+dotchart(exp.stolen.count, labels=(as.character(seq(1975,2014))))
+```
+
+
+Create a dataframe combining the expected and actual numbers of stolen vehicles by year.
+```{r}
+year.range <- seq(1975,2014)
+exp.stolen <- data.frame(year = year.range, stolen.count = exp.stolen.count, type="expected")
+act.stolen <- data.frame(year=row.names(yrs.table), stolen.count = as.numeric(yrs.table),type="actual")
+stolen <- rbind(exp.stolen, act.stolen)
+```
+
+Now compare the expected and actual stolen counts for each year:
+```{r}
+dotplot(year ~ stolen.count|type, data=stolen)
+```
+
+Use ggplot2 for an alternate view
+
+```{r fig.height=8}
+ggplot(stolen, aes(x = stolen.count, y = year, fill=type)) +
+  geom_dotplot(binaxis = "y") +
+  labs(title="Expected vs. Actual Vehicle Thefts by Model Year",x="Vehicles Stolen")
+```
+
