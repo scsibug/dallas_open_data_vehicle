@@ -1,5 +1,5 @@
 ---
-title: "Vehicle Theft Rates by Year"
+title: "Dallas Vehicle Theft Rates by Year"
 author: "Greg Heartsfield"
 date: "December 13, 2014"
 output: html_document
@@ -7,15 +7,16 @@ output: html_document
 
 # Introduction
 
-This is a quick attempt to understand theft rates of vehicles in Dallas, based on the [Dallas Open Data](https://www.dallasopendata.com/) website and a very simple exponential model of vehicle life.  This was created during the [Dallas R Meetup Data Hackathon](http://www.meetup.com/Dallas-R-Users-Group/events/218651376/)
+This is a quick attempt to understand theft rates of vehicles in Dallas, based on the [Dallas Open Data](https://www.dallasopendata.com/) website and a very simple exponential model of vehicle life.  This was created during the [Dallas R Meetup Data Hackathon](http://www.meetup.com/Dallas-R-Users-Group/events/218651376/).  The main question I wanted to answer was, do vehicle theft rates change based on vehicle age?  And if so, does this mean that very new cars are more or less likely to be stolen?
 
 # Importing and Exploration
 
-Import libraries for graphing.
+Import libraries for graphing and data manipulation.
 
 ```{r warning=FALSE,message=FALSE}
 require(lattice)
 require(ggplot2)
+require(plyr)
 ```
 
 
@@ -67,6 +68,15 @@ yrs.table <- table(vehicles.stolen$VehYr)
 dotchart(as.numeric(yrs.table), labels=row.names(yrs.table))
 ```
 
+Lets also compare the distributions of the other kinds of vehicle incidents to understand if there is something distinct about thefts.  I've removed some of the types that have very little data.
+
+```{r fig.height=10, fig.width=8}
+vehicles.by.type <- data.frame(year=vehicle.correct.years$VehYr, type=vehicle.correct.years$VehType)
+vehicle.type.table <- as.data.frame(table(vehicles.by.type))
+veh.type.subset <- vehicle.type.table[which(vehicle.type.table$type %in% c("Victim", "Stolen", "Suspect", "Recovered")),]
+dotplot(year ~ Freq|type, data=veh.type.subset)
+```
+
 The average age of vehicles on the road is 11.4 years (http://www.latimes.com/business/autos/la-fi-hy-ihs-automotive-average-age-car-20140609-story.html).  It is reasonable to assume that a car's "survival" rate may be modeled by an exponential distribution (a car may have a 5% chance of being removed from the population each year).  This isn't perfect, but it's not totally unrealistic.  Based on that, we can determine a very rough estimate of the underlying distribution of car ages.
  
  * Assumptions: number of cars sold each year is constant.
@@ -107,7 +117,7 @@ act.stolen <- data.frame(year=row.names(yrs.table), stolen.count = as.numeric(yr
 stolen <- rbind(exp.stolen, act.stolen)
 ```
 
-# Final Result
+# Comparing Actual and Expected
 
 Now compare the expected and actual stolen counts for each year:
 
@@ -129,3 +139,26 @@ There are many potential explanations for this result:
 * Very new cars have better anti-theft mechanisms.
 * Very new cars less likely to be left in high-theft areas.
 * Very old cars not worth the potential trouble to steal (low payoff).
+
+# Theft Risk Ratio
+
+Another way to view this is by the ratio of actual thefts to expected thefts based on our population estimate.
+
+We start by building a new dataframe for each of the years with the actual and expected thefts together.  We'll just omit years with no actual thefts.
+
+```{r}
+rr.left <- data.frame(year=seq(1975,2014), expected=exp.stolen$stolen.count)
+rr <- merge(rr.left,act.stolen)
+rr$type <- NULL
+rr <- rename(rr,c("stolen.count"="actual"))
+```
+
+Compute the ratio:
+
+```{r}
+rr$ratio <- rr$actual / rr$expected
+```
+
+```{r fig.height=8, fig.width=8}
+dotplot(as.character(year) ~ ratio, data=rr)
+```
